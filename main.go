@@ -25,7 +25,7 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 				if p.Name == "fmt" && (s.Sel.Name == "Printf" || s.Sel.Name == "Println") {
 					buf := &bytes.Buffer{}
 					printer.Fprint(buf, v.fset, node)
-					fmt.Printf("%s\n", buf.String())
+					fmt.Printf("%s: %s\n", v.fset.Position(node.Pos()), buf.String())
 				}
 			}
 		}
