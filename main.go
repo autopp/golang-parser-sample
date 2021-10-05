@@ -9,6 +9,8 @@ import (
 	"go/token"
 	"log"
 	"os"
+
+	"golang.org/x/tools/go/loader"
 )
 
 type visitor struct {
@@ -34,12 +36,12 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 }
 
 func main() {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, os.Args[1], nil, 0)
+	l := loader.Config{ParserMode: parser.ParseComments}
+	f, err := l.ParseFile(os.Args[1], nil)
 	if err != nil {
 		log.Fatalf("ParseFile failed: %s", err)
 	}
 
-	v := &visitor{fset}
+	v := &visitor{l.Fset}
 	ast.Walk(v, f)
 }
