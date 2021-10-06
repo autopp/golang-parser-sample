@@ -37,11 +37,19 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 
 func main() {
 	l := loader.Config{ParserMode: parser.ParseComments}
-	f, err := l.ParseFile(os.Args[1], nil)
+	astf, err := l.ParseFile(os.Args[1], nil)
 	if err != nil {
 		log.Fatalf("ParseFile failed: %s", err)
 	}
+	l.CreateFromFiles("", astf)
+	prog, err := l.Load()
+	if err != nil {
+		log.Fatalf("Load failed: %s", err)
+	}
 
 	v := &visitor{l.Fset}
-	ast.Walk(v, f)
+	main := prog.Package("main")
+	for _, f := range main.Files {
+		ast.Walk(v, f)
+	}
 }
