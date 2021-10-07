@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"go/types"
 	"log"
 	"os"
 
@@ -14,7 +15,9 @@ import (
 )
 
 type visitor struct {
-	fset *token.FileSet
+	fset   *token.FileSet
+	prog   *loader.PackageInfo
+	fmtpkg *types.Package
 }
 
 func (v *visitor) Visit(node ast.Node) ast.Visitor {
@@ -23,8 +26,8 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 	}
 	if c, ok := node.(*ast.CallExpr); ok {
 		if s, ok := c.Fun.(*ast.SelectorExpr); ok {
-			if p, ok := s.X.(*ast.Ident); ok {
-				if p.Name == "fmt" && (s.Sel.Name == "Printf" || s.Sel.Name == "Println") {
+			if v.prog.Info.ObjectOf(s.Sel).Pkg() == v.fmtpkg {
+				if s.Sel.Name == "Printf" || s.Sel.Name == "Println" {
 					buf := &bytes.Buffer{}
 					printer.Fprint(buf, v.fset, node)
 					fmt.Printf("%s: %s\n", v.fset.Position(node.Pos()), buf.String())
@@ -47,9 +50,8 @@ func main() {
 		log.Fatalf("Load failed: %s", err)
 	}
 
-	v := &visitor{l.Fset}
-	main := prog.Package("main")
-	for _, f := range main.Files {
-		ast.Walk(v, f)
-	}
+	main := prog.Package(astf.Name.Name)
+	fmtpkg := prog.Package("fmt").Pkg
+	v := &visitor{l.Fset, main, fmtpkg}
+	ast.Walk(v, astf)
 }
