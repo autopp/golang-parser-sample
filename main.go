@@ -4,20 +4,19 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/printer"
 	"go/token"
 	"go/types"
 	"log"
 	"os"
 
-	"golang.org/x/tools/go/loader"
+	"golang.org/x/tools/go/packages"
 )
 
 type visitor struct {
-	fset   *token.FileSet
-	prog   *loader.PackageInfo
-	fmtpkg *types.Package
+	fset     *token.FileSet
+	typeInfo *types.Info
+	fmtpkg   *types.Package
 }
 
 func (v *visitor) Visit(node ast.Node) ast.Visitor {
@@ -26,7 +25,7 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 	}
 	if c, ok := node.(*ast.CallExpr); ok {
 		if s, ok := c.Fun.(*ast.SelectorExpr); ok {
-			if v.prog.Info.ObjectOf(s.Sel).Pkg() == v.fmtpkg {
+			if v.typeInfo.ObjectOf(s.Sel).Pkg() == v.fmtpkg {
 				if s.Sel.Name == "Printf" || s.Sel.Name == "Println" {
 					buf := &bytes.Buffer{}
 					printer.Fprint(buf, v.fset, node)
@@ -39,19 +38,29 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 }
 
 func main() {
-	l := loader.Config{ParserMode: parser.ParseComments}
-	astf, err := l.ParseFile(os.Args[1], nil)
-	if err != nil {
-		log.Fatalf("ParseFile failed: %s", err)
-	}
-	l.CreateFromFiles("", astf)
-	prog, err := l.Load()
-	if err != nil {
-		log.Fatalf("Load failed: %s", err)
+	cfg := &packages.Config{
+		Tests: false,
+		Mode:  packages.NeedCompiledGoFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
 	}
 
-	main := prog.Package(astf.Name.Name)
-	fmtpkg := prog.Package("fmt").Pkg
-	v := &visitor{l.Fset, main, fmtpkg}
-	ast.Walk(v, astf)
+	pkgs, err := packages.Load(cfg, os.Args[1])
+	if err != nil {
+		log.Fatalf("packages.Load failed: %s", err)
+	}
+
+	pkg := pkgs[0]
+	var fmtPkg *types.Package
+	for _, p := range pkg.Types.Imports() {
+		if p.Path() == "fmt" {
+			fmtPkg = p
+			break
+		}
+	}
+
+	if fmtPkg == nil {
+		return
+	}
+
+	v := &visitor{fset: pkg.Fset, typeInfo: pkg.TypesInfo, fmtpkg: fmtPkg}
+	ast.Walk(v, pkg.Syntax[0])
 }
